@@ -1,0 +1,24 @@
+{
+  "name": "ALO AI — Cha Eun-woo Edition",
+  "short_name": "ALO AI Eun-woo",
+  "description": "An intimate, thoughtful AI chat experience featuring Cha Eun-woo.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0D0E10",
+  "theme_color": "#0D0E10",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ]
+}
