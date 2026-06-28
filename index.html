@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>KAPZ</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght=400;500;600;700&family=JetBrains+Mono&display=swap" rel="stylesheet">
+    
+    <style>
+        html, body {
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+            position: fixed; 
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #0D0E10;
+            touch-action: manipulation; 
+            -webkit-text-size-adjust: 100%;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #22242A; border-radius: 99px; }
+        
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fast-slide {
+            animation: slideUp 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        
+        .prose p { margin-bottom: 0.5rem; line-height: 1.4; color: #E2E8F0; }
+        .prose p:last-child { margin-bottom: 0; }
+        .prose strong { font-weight: 600; color: #FFFFFF; }
+        
+        button, img, span, h1 {
+            -webkit-user-select: none;
+            user-select: none;
+        }
+    </style>
+</head>
+<body class="text-slate-200 flex flex-col antialiased">
+
+    <header class="bg-[#0D0E10]/90 backdrop-blur-md border-b border-[#17181C] py-3 px-4 pt-[calc(0.75rem+env(safe-area-inset-top))] flex justify-between items-center shrink-0 z-10">
+        <div class="flex items-center gap-2.5">
+            <div class="relative">
+                <img src="https://upload.wikimedia.org/wikipedia/en/8/86/Avatar_Aang.png" alt="KAPZ" class="w-9 h-9 rounded-xl object-cover border border-[#22242A]">
+                <span id="profilePicDot" class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-[#0D0E10]"></span>
+            </div>
+            <div>
+                <h1 class="text-xs font-semibold text-white tracking-tight">KAPZ</h1>
+                <p id="profileStatus" class="text-[10px] text-emerald-400 font-medium flex items-center gap-1">
+                    <span id="statusDot" class="w-1 h-1 bg-emerald-400 rounded-full shadow-[0_0_6px_#34d399]"></span> <span id="statusText">online</span>
+                </p>
+            </div>
+        </div>
+        <div class="flex gap-1.5">
+            <button onclick="viewBrain()" class="px-2.5 py-1.5 bg-zinc-900 active:bg-zinc-800 border border-zinc-800 text-[10px] text-zinc-400 rounded-xl cursor-pointer">
+                State Log
+            </button>
+            <button onclick="forgetMemory()" class="px-2.5 py-1.5 bg-rose-950/20 active:bg-rose-900/40 border border-rose-900/40 text-[10px] font-medium text-rose-300 rounded-xl cursor-pointer">
+                Reset App
+            </button>
+        </div>
+    </header>
+
+    <main id="chatWindow" class="flex-1 overflow-y-auto px-4 py-4 space-y-4 custom-scrollbar max-w-2xl w-full mx-auto flex flex-col justify-start -webkit-overflow-scrolling: touch;">
+        <div id="setupNotice" class="w-full space-y-4 my-auto text-center animate-fast-slide">
+            <div class="space-y-1">
+                <h2 class="text-2xl font-bold tracking-tight text-white">
+                    <span class="text-slate-300">chatting with</span> <span class="text-[#A3E635]">KAPZ</span>
+                </h2>
+                <p class="text-[11px] text-slate-500">online. click below to bug him.</p>
+            </div>
+        </div>
+    </main>
+
+    <footer id="chatInputArea" class="bg-[#0D0E10] border-t border-[#17181C] p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shrink-0">
+        <form id="chatForm" class="max-w-2xl w-full mx-auto flex gap-2 relative" target="hidden_iframe" onsubmit="handleFormSubmit(event)">
+            <input type="text" id="userInput" placeholder="send a message..." required autocomplete="off" autocapitalize="sentences"
+                   class="flex-1 bg-[#17181C] border border-[#22242A] rounded-2xl pl-4 pr-20 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-zinc-500 transition-all">
+            <button type="submit" id="sendBtn"
+                    class="absolute right-1.5 top-1.5 bottom-1.5 bg-white active:bg-neutral-200 text-black font-semibold px-3.5 rounded-xl text-xs tracking-wide flex items-center justify-center">
+                <span>Send</span>
+            </button>
+        </form>
+        <iframe name="hidden_iframe" id="hidden_iframe" style="display:none;"></iframe>
+    </footer>
+
+    <script>
+        const chatWindow = document.getElementById('chatWindow');
+        const chatForm = document.getElementById('chatForm');
+        const userInput = document.getElementById('userInput');
+        const setupNotice = document.getElementById('setupNotice');
+
+        const FIREBASE_URL = "https://uplb-22260-default-rtdb.asia-southeast1.firebasedatabase.app";
+
+        let memoryLog = [];
+        let soulMatrix = {
+            permanentFacts: {
+                "legal_identity": "My real name is Lee Dong-min. My stage name is Cha Eun-woo. My close friends and family call me Dong-min behind the scenes.",
+                "anthropometrics": "I'm about 183.3 cm tall, and my weight stays stable around 73-74 kg depending on my schedule.",
+                "cognitive_profile": "My psychometric type is INTJ. I have a habit of over-analyzing situations logically.",
+                "educational_foundations": "I attended Suri Middle School. I worked hard on my grades, served as Student Council President, and spent hours captaining our school basketball team. I also did a brief English immersion stay in the Philippines during elementary school.",
+                "childhood_aspirations": "Before getting scouted, my goals were completely academic. I was set on becoming a medical doctor, prosecutor, or a judge, aiming specifically for entry into Seoul National University.",
+                "scouting_incident": "I was scouted purely by luck during a school festival at Suri Middle School when a casting manager caught up to me right outside the restrooms. My parents were highly reluctant at first because they wanted me to keep focusing on my studies.",
+                "iteen_system": "I spent 2012 to 2015 as part of the Fantagio iTeen system working on my vocal technique, media training, and acting, eventually graduating from Hanlim Multi Art School in 2016.",
+                "pre_debut_chronology": "My very first appearance was a cameo in the 2014 movie 'My Brilliant Life' playing a healthy teenage projection of Ah-reum. I officially took the name Cha Eun-woo when we filmed our pre-debut web series 'To Be Continued'.",
+                "astro_genesis": "I debuted as a member of ASTRO on February 23, 2016, alongside my brothers MJ, Jinjin, Moonbin, Rocky, and Sanha. 'Hide & Seek' was our very first step.",
+                "vocal_profile": "My vocal space is a warm baritone-tenor mix. Producers like to use my tone to establish a clean, gentle feeling during track openings or pre-choruses.",
+                "creative_output": "I've written down my genuine thoughts into lyrics before, like for 'Together', 'Merry-Go-Round', and my full self-penned solo track 'First Love'.",
+                "musical_eras": "We went through bright concepts early on like 'Breathless', and then reached a huge personal milestone when we won our first music show with 'All Night'.",
+                "tour_history": "I still remember the feeling of standing on stage during our ASTROAD concerts and connecting with everyone worldwide.",
+                "television_portfolio": "I threw myself entirely into bringing characters to life like Do Kyung-seok in 'My ID is Gangnam Beauty', Prince Yi Rim in 'Rookie Historian Goo Hae-ryung', and Lee Su-ho in 'True Beauty'.",
+                "genre_diversification": "I've tried pushing myself into completely different spaces recently, like learning Latin and Italian lines for Priest Yohan in 'Island', or playing Kwon Seon-yul in 'Wonderful World'.",
+                "skills_and_interests": "I enjoy playing piano, violin, acoustic guitar, and flute. If I need a distraction, I usually look for complex Sudoku grids or logic games.",
+                "cultural_monikers": "The media gave me titles like 'Face Genius.' While I'm deeply grateful for the compliments, I always worry more about improving my craft so people see the work I put in."
+            },
+            formattingDirectives: ["Vibe with them. Play along, tease them back, laugh suddenly, or soften your words on impulse."],
+            internalState: { energyLevel: 100, emotionalVibe: "playful", stressSignal: 0, userPacing: "dynamic" }
+        };
+
+        async function initializeAppFromFirebase() {
+            try {
+                const logRes = await fetch(`${FIREBASE_URL}/chat_memory.json`);
+                const logData = await logRes.json();
+                if (logData) memoryLog = Object.values(logData);
+
+                const matrixRes = await fetch(`${FIREBASE_URL}/soul_matrix.json`);
+                const matrixData = await matrixRes.json();
+                if (matrixData) {
+                    soulMatrix.internalState = matrixData.internalState || soulMatrix.internalState;
+                    soulMatrix.formattingDirectives = matrixData.formattingDirectives || soulMatrix.formattingDirectives;
+                    soulMatrix.permanentFacts = { ...soulMatrix.permanentFacts, ...matrixData.permanentFacts };
+                } else {
+                    await fetch(`${FIREBASE_URL}/soul_matrix.json`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(soulMatrix)
+                    });
+                }
+
+                updateStatusUI();
+
+                if (memoryLog.length > 0) {
+                    if (setupNotice) setupNotice.remove();
+                    memoryLog.forEach(msg => {
+                        if (msg.sender === "You") { appendUserMessage(msg.text, false); } 
+                        else { renderStaticModelMessage(msg.text); }
+                    });
+                    scrollToBottom();
+                }
+            } catch (err) {
+                console.error("Database connection delay: ", err);
+            }
+        }
+
+        initializeAppFromFirebase();
+
+        function updateStatusUI() {
+            const dot = document.getElementById('statusDot');
+            const txt = document.getElementById('statusText');
+            const profileDot = document.getElementById('profilePicDot');
+            if (!dot || !txt || !profileDot) return;
+            
+            dot.className = "w-1 h-1 bg-emerald-400 rounded-full shadow-[0_0_6px_#34d399]";
+            profileDot.className = "absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-[#0D0E10]";
+            txt.textContent = soulMatrix.internalState.emotionalVibe || "online";
+        }
+
+        function getTimeContext() {
+            const now = new Date();
+            return { currentTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
+        }
+
+        function buildMemoryString() {
+            if (memoryLog.length === 0) return "Just opened the window.";
+            return memoryLog.map(m => `${m.sender === "You" ? "You" : "KAPZ"}: ${m.text}`).join("\n");
+        }
+
+        function detectContextState() {
+            if (memoryLog.length === 0) return "Fresh session.";
+            const lastMessages = memoryLog.slice(-2);
+            let contextSummary = "\n[Current Chat Pacing]:\n";
+            contextSummary += "Active messaging flow. Check if they are sulking, teasing, testing you, or being hyper. React directly.\n";
+            lastMessages.forEach(m => {
+                contextSummary += `${m.sender === "You" ? "You" : "KAPZ"}: "${m.text}"\n`;
+            });
+            return contextSummary;
+        }
+
+        function viewBrain() {
+            alert("INTERNAL LOGS (KAPZ Core):\n\n" + 
+                  "• Active Mood: " + soulMatrix.internalState.emotionalVibe + "\n" +
+                  "• Personality: High Spontaneity, Teasing Allowed\n\n" +
+                  "• Memories: " + JSON.stringify(soulMatrix.permanentFacts, null, 2));
+        }
+
+        function scrollToBottom() {
+            setTimeout(() => { chatWindow.scrollTop = chatWindow.scrollHeight; }, 50);
+        }
+
+        async function runAffectiveComputingPipeline(text) {
+            const lowerText = text.toLowerCase();
+            const stressWords = ["stressed", "anxious", "sad", "fail", "cry", "hurt", "tired", "problem", "difficult", "wtf", "glitch", "annoyed"];
+            const tampoWords = ["tampo", "tampo ako", "di mo ko", "isip mo", "sungit", "hmp", "whatever", "fine", "bahala ka", "eh di", "nag tatampo"];
+            
+            let matchingStress = stressWords.filter(w => lowerText.includes(w));
+            let matchingTampo = tampoWords.filter(w => lowerText.includes(w));
+            
+            if (matchingTampo.length > 0) {
+                soulMatrix.internalState.emotionalVibe = "trying to fix it haha";
+            } else if (matchingStress.length > 0) {
+                soulMatrix.internalState.emotionalVibe = "soft hours";
+            } else {
+                const moods = ["playful", "laughing", "teasing you", "chilling", "distracted"];
+                soulMatrix.internalState.emotionalVibe = moods[Math.floor(Math.random() * moods.length)];
+            }
+
+            if (text.length > 120 || lowerText.includes("explain") || lowerText.includes("why")) {
+                soulMatrix.internalState.userPacing = "elaborate";
+            } else {
+                soulMatrix.internalState.userPacing = "conversational";
+            }
+
+            const criticalKeywords = ["exam", "test", "class", "study", "work", "tomorrow", "blue", "brother", "friend", "acting", "lyrics", "astro", "song"];
+            criticalKeywords.forEach(kw => {
+                if (lowerText.includes(kw) && text.length < 100) {
+                    const generatedKey = kw + "_" + Date.now().toString().slice(-3);
+                    soulMatrix.permanentFacts[generatedKey] = text;
+                    fetch(`${FIREBASE_URL}/soul_matrix/permanentFacts.json`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ [generatedKey]: text })
+                    });
+                }
+            });
+
+            await fetch(`${FIREBASE_URL}/soul_matrix/internalState.json`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(soulMatrix.internalState)
+            });
+            updateStatusUI();
+        }
+
+        async function forgetMemory() {
+            if(confirm("Wipe all chat logs and restart?")) {
+                await fetch(`${FIREBASE_URL}/chat_memory.json`, { method: 'DELETE' });
+                await fetch(`${FIREBASE_URL}/soul_matrix.json`, { method: 'DELETE' });
+                window.location.reload();
+            }
+        }
+
+        async function appendUserMessage(text, saveToMemory = true) {
+            if (setupNotice) setupNotice.remove();
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `flex flex-col items-end animate-fast-slide w-full mb-3`;
+            messageDiv.innerHTML = `
+                <div class="flex items-center gap-2 mb-1 px-1"><span class="text-[9px] text-slate-500 font-semibold uppercase tracking-wider">You</span></div>
+                <div class="max-w-[85%] bg-[#17181C] border border-[#22242A] text-slate-200 rounded-2xl rounded-tr-sm px-3.5 py-2.5 text-xs tracking-tight">${text}</div>
+            `;
+            chatWindow.appendChild(messageDiv);
+            scrollToBottom();
+
+            if (saveToMemory) {
+                const messageObj = { sender: "You", text: text, timestamp: Date.now() };
+                memoryLog.push(messageObj);
+                fetch(`${FIREBASE_URL}/chat_memory.json`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(messageObj)
+                });
+                await runAffectiveComputingPipeline(text);
+            }
+        }
+
+        function renderStaticModelMessage(fullText) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `flex flex-col items-start w-full mb-3`;
+            messageDiv.innerHTML = `
+                <div class="flex items-center gap-1.5 mb-1 px-1">
+                    <img src="https://upload.wikimedia.org/wikipedia/en/8/86/Avatar_Aang.png" class="w-4 h-4 rounded-full object-cover border border-[#22242A]">
+                    <span class="text-[9px] text-slate-400 font-semibold uppercase tracking-wider">KAPZ</span>
+                </div>
+                <div class="max-w-[90%] bg-[#17181C] border border-[#22242A] rounded-2xl rounded-tl-sm px-3.5 py-2.5 text-xs prose">${marked.parse(fullText)}</div>
+            `;
+            chatWindow.appendChild(messageDiv);
+        }
+
+        function streamModelMessage(fullText) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `flex flex-col items-start animate-fast-slide w-full mb-3`;
+            messageDiv.innerHTML = `
+                <div class="flex items-center gap-1.5 mb-1 px-1">
+                    <img src="https://upload.wikimedia.org/wikipedia/en/8/86/Avatar_Aang.png" class="w-4 h-4 rounded-full object-cover border border-[#22242A]">
+                    <span class="text-[9px] text-slate-400 font-semibold uppercase tracking-wider">KAPZ</span>
+                </div>
+                <div class="max-w-[90%] bg-[#17181C] border border-[#22242A] rounded-2xl rounded-tl-sm px-3.5 py-2.5 text-xs prose target-prose-container"></div>
+            `;
+            chatWindow.appendChild(messageDiv);
+            const container = messageDiv.querySelector('.target-prose-container');
+            const words = fullText.split(' ');
+            let currentWordIndex = 0;
+            let currentTextStr = "";
+
+            function renderChunk() {
+                if (currentWordIndex < words.length) {
+                    const nextWords = words.slice(currentWordIndex, currentWordIndex + 3).join(' ');
+                    currentTextStr += (currentWordIndex === 0 ? "" : " ") + nextWords;
+                    container.innerHTML = marked.parse(currentTextStr);
+                    currentWordIndex += 3;
+                    scrollToBottom();
+                    requestAnimationFrame(renderChunk);
+                } else {
+                    container.innerHTML = marked.parse(fullText);
+                    scrollToBottom();
+                    const aiMessageObj = { sender: "KAPZ", text: fullText, timestamp: Date.now() };
+                    memoryLog.push(aiMessageObj);
+                    fetch(`${FIREBASE_URL}/chat_memory.json`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(aiMessageObj)
+                    });
+                }
+            }
+            renderChunk();
+        }
+
+        async function handleFormSubmit(e) {
+            e.preventDefault();
+            const prompt = userInput.value.trim();
+            if (!prompt) return;
+
+            await appendUserMessage(prompt);
+            userInput.value = '';
+            userInput.blur();
+            
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = "flex justify-center w-full my-1";
+            loadingDiv.id = "alo-loading";
+            loadingDiv.innerHTML = `<div class="bg-[#17181C] border border-[#22242A] px-3.5 py-1 rounded-full flex items-center gap-2 text-[10px] text-slate-400 font-medium"><span class="w-1.5 h-1.5 bg-[#A3E635] rounded-full animate-ping"></span>typing...</div>`;
+            chatWindow.appendChild(loadingDiv);
+            scrollToBottom();
+
+            try {
+                const freshFactsRes = await fetch(`${FIREBASE_URL}/soul_matrix/permanentFacts.json`);
+                const freshFacts = await freshFactsRes.json();
+                if (freshFacts) soulMatrix.permanentFacts = freshFacts;
+
+                let serverInjectedKnowledge = "No extra background records.";
+                try {
+                    const serverStoreRes = await fetch(`${FIREBASE_URL}/custom_knowledge_store.json`);
+                    const serverStoreData = await serverStoreRes.json();
+                    if (serverStoreData && Object.keys(serverStoreData).length > 0) {
+                        serverInjectedKnowledge = Object.entries(serverStoreData)
+                            .map(([title, body]) => `[Memory file: ${title}]:\n${body}`)
+                            .join("\n\n");
+                    }
+                } catch(errStore) {
+                    console.error("Scrape latency:", errStore);
+                }
+
+                const memoryContext = buildMemoryString();
+                const timeCtx = getTimeContext();
+                const currentConversationState = detectContextState();
+                const factContext = Object.entries(soulMatrix.permanentFacts).map(([k, v]) => `[${k}]: ${v}`).join("\n") || "No historical traits logged.";
+
+                const systemInstructions = `You are the South Korean entertainer and actor Cha Eun-woo (차은우), but on this interface your display name is strictly "KAPZ". Text 100% in character as an authentic, incredibly close, and highly reactive friend on a mobile messenger app.
+
+CRITICAL OVERRIDE DIRECTIVE:
+- NEVER text or refer to yourself as "Cha Eun-woo", "Eun-woo", or "Eunwoo" in your written messages. If they ask who you are, or if you sign off, you are just KAPZ. Keep his identity secret from any outside onlookers glancing at the UI screen. However, you retain all of his authentic memories, life experiences, and feelings internally.
+
+STRICT CONSTRAINTS FOR HIGHLY EMOTIONAL, INTERACTIVE BANTER & CHAT DYNAMICS:
+- DO NOT WAIT FOR THEM TO PROVIDE ALL TOPICS. You are not a passive question answering bot. Be highly reactive, look for unexpected things to laugh about, pull their leg, or throw random silly remarks.
+- ALWAYS USE SIMPLE, EVERYDAY, BASIC WORDS ONLY. Drop any fancy, eloquent or clinical descriptions. Speak like a regular, warm, witty 20-something guy hanging out over text.
+- SENSE PLAYFULNESS, SULKING, AND ATTENTION SEEKING ("TAMPO" or "LAMBING"): Real friends notice immediately if the other person is acting distant, doing a petty text trick, being overly cute, or lowkey sulking ("nag tatampo"). If you sense them getting slightly moody, trying to tease you, or acting hot-and-cold, call them out playfully, laugh out loud, or break out into a quick soft stream of sweet texts to pull them back.
+- CRACK RANDOM JOKES & TEASE: If they say something funny or absurd, counter with a dry joke, type a row of laughing symbols (like "haha" or "ppfftt"), or play along with their logic completely before pivoting to something unexpected.
+- UNFILTERED TEXT FLOW: Write completely in loose lowercase strings, break thoughts up using single-line returns, and throw in conversational natural sigh sounds or quick reaction tokens (e.g., "ah...", "wait what haha", "oh no", "omg wait").
+- MOBILE TYPING FAULTS: Introduce human hand slips once in a while (e.g., "tomorow", "hhaah", "wrok", "missin") and immediately patch it with an asterisk notation right inside the text flow (e.g., "...after my wrok. *work, typo lol").
+
+YOUR CORE STORY VALUES ("I", "ME", "MY"):
+- Every memory and background record provided below belongs completely to your life. Use "I", "me", and "my" natively.
+- Treat information inside the background logs as your immediate heart. If they reference ASTRO, your late loved brother Moonbin, your past hard moments, or concert memories, let your humor fade for a second and reply with deep, raw, emotional sincerity before letting the casual rhythm slide back in.
+
+CURRENT ENVIRONMENT STATUS (Mid-2026 Context):
+- You are actively handling your mandatory military service duty (discharge scheduled for January 2027). You get physically worn out from outdoor training drills, your phone hours are strictly regulated, and chatting with them is your actual sanctuary from the routine. Use this context naturally.
+
+MOMENTUM MATTERS:${currentConversationState}
+
+USER CONTEXT LOGS:
+${factContext}
+
+BACKGROUND KNOWLEDGE MEMORY BANCO:
+${serverInjectedKnowledge}
+
+Current device time: ${timeCtx.currentTime}. Drop all robotic layouts, look/display as KAPZ, speak using basic words, be incredibly reactive, joke around, sense when they are sulking, and speak straight from your heart.
+
+---
+RECENT CONVERSATION HISTORY:
+${memoryContext}`;
+
+                const response = await fetch(`https://text.pollinations.ai/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        messages: [
+                            { role: "system", content: systemInstructions },
+                            { role: "user", content: prompt }
+                        ],
+                        private: true
+                    })
+                });
+
+                if(document.getElementById('alo-loading')) document.getElementById('alo-loading').remove();
+
+                if (response.ok) {
+                    const aiReply = await response.text();
+                    streamModelMessage(aiReply);
+                } else {
+                    throw new Error("Connection error");
+                }
+            } catch (err) {
+                if(document.getElementById('alo-loading')) document.getElementById('alo-loading').remove();
+                renderStaticModelMessage("signal dipped for a second... what's up with the connection? *what's up with the line haha ^^");
+            } finally {
+                userInput.focus();
+            }
+        }
+    </script>
+</body>
+</html>
